@@ -7,6 +7,7 @@ use Data::Dumper;
 use HTML::Entities;
 use URI;
 use Encode;
+use File::Basename;
 
 use AMMS::Util;
 use AMMS::AppFinder;
@@ -127,8 +128,6 @@ sub extract_app_info {
         $tree->parse($webpage);
 
         #$app_info->{author} = "巴士商店";    #未知
-        #title
-        my $title = $1 if $webpage =~ /<title>([^<]+)<\/title>/s;
 
         @nodes = $tree->look_down( "_tag", "div", "class", "Tariff-t" );
         ( $app_info->{app_name}, $app_info->{current_version} ) =
@@ -190,13 +189,8 @@ sub extract_app_info {
         if ( scalar @a_tag ) {
             local $URI::ABS_REMOTE_LEADING_DOTS = 1;
             $app_info->{apk_url} =
-              URI->new( $a_tag[0]->attr("href") )->abs( &get_base_url($title) )
+              URI->new( $a_tag[0]->attr("href") )->abs( dirname($app_info->{app_url}) )
               ->as_string;
-
-            #app_url
-            $app_info->{app_url} =
-              &get_base_url($title) . "/item-" . $1 . ".html"
-              if $a_tag[0]->attr("href") =~ /(\d+).html$/;
         }
 
         #description
@@ -235,8 +229,7 @@ sub extract_page_list {
     eval {
         $tree = HTML::TreeBuilder->new;
         $tree->parse( $params->{'web_page'} );
-        my $title = $1 if $params->{'web_page'} =~ /<title>([^<]+)<\/title>/s;
-        my $base_url_real = &get_base_url($title);
+        my $base_url_real = dirname($params->{base_url});
 
         @nodes = $tree->look_down( "_tag", "div", "class", "pic1-bb" );
         @tags = $nodes[0]->find_by_tag_name("i");
@@ -267,29 +260,16 @@ sub extract_app_from_feeder {
         $tree = HTML::TreeBuilder->new;    # empty tree
         $tree->parse( $params->{'web_page'} );
 
-        my $title = $1 if $params->{'web_page'} =~ /<title>([^<]+)<\/title>/s;
-        my $base_url_real = &get_base_url($title);
+        my $base_url_real = dirname($params->{base_url});
         @node = $tree->look_down( class => "EBook" );
         my @a_tag =
           $node[0]->look_down( "_tag", "a",
             sub { $_[0]->attr("href") =~ /item-\d+/; } );
         foreach my $item (@a_tag) {
             next if not ref $item;
-            $apps->{$1} = $base_url_real . "/" . $item->attr("href")
+            $apps->{$1} = $base_url_real."/".$item->attr("href")
               if scalar(@a_tag) && $item->attr("href") =~ /item-(\d+)/;
         }
-
-=pod
-		my @dl_tags = $node[0]->find_by_tag_name("_tag","dl");
-		foreach my $item(@dl_tags){
-			my $content = decode_entities($item->as_HTML);					
-			print $content;
-			my($app_url,$app_id,$platform) = ($content =~/(item-(\d+)\.html).*?search-size[^>]+>([^<]+)<\/a>/sm);
-			if(defined($platform) && ($platform eq "Android")){
-				$apps->{$app_id} = $base_url_real . "/" .$app_url;	
-			}
-		}
-=cut
 
         $tree = $tree->delete;
     };
@@ -299,14 +279,13 @@ sub extract_app_from_feeder {
     return 1;
 }
 
+
 sub get_base_url {
-    my ($page_title) = @_;
-    if ( $page_title =~ /手机游戏/m ) {
-        return $url_base . "/game";
-    }
-    else {
-        return $url_base . "/soft";
-    }
+    my $url = shift;
+    my @url_segment = split /\//,$url;
+    pop(@url_segment);
+    my $url_base = join "/",@url_segment;
+    return $url_base;
 }    ## --- end sub get_base_url
 
 #-------------------------------------------------------------------------------

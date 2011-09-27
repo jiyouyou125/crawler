@@ -20,11 +20,9 @@ my %market_feed     = (
     'm.163.com'=>'163.url',
 	'dg.tgbus.com' => 'tgbus.url',
     'www.anfone.com'=>'anfone.url',
-<<<<<<< .mine
 	'www.189store.com' =>'189store.url',
-=======
     'dg.tgbus.com'=>'tgbus.url',
->>>>>>> .r1845
+    'sj.zol.com.cn' => 'zol.url',
         );
 
 die "\nplease check config parameter\n" unless init_gloabl_variable( $conf_file );

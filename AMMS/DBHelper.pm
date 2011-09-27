@@ -7,6 +7,8 @@ use LWP;
 use DBI;
 use AMMS::Config;
 use Digest::MD5 qw(md5_hex);
+use Data::Dumper;
+use Storable qw(thaw freeze);
 
 my $singleton;
 
@@ -788,48 +790,20 @@ sub save_package
 sub save_extra_info{
     my $self = shift;
     my $app_url_md5 = shift;
-    my $arg = shift;
-
-    my $sql = "replace into app_extra_info(app_url_md5,data_key,data_value) values(?,?,?)";
-    my $sth = $self->{ 'DB_Handle' }->prepare($sql);
-    eval{
-        if(ref $arg eq "HASH"){
-            foreach my $key(keys %$arg){
-                $sth->execute($app_url_md5,$key,$arg->{$key});
-            }
-        }
-    };
-    if($@){
-        $self-> { 'CONFIG_HANDLE' }->getAttribute('LOGGER')->error(
-            "fail to insert extra_info for app_url_md5:$app_url_md5,Error:".$self->{'DB_Handle'}->errstr;
-        );
-        return 0;
-    }
-    return 1;
+    my $data = shift;
+    my $seri_data = freeze($data);
+    my $sql = "replace into app_extra_info(app_url_md5,infomation) values(?,?)"; 
+    my $sth = $self->{'DB_Handle'}->prepare($sql);
+    $sth->execute($app_url_md5,$seri_data);
 }
 
 sub get_extra_info{
     my $self = shift;
     my $app_url_md5 = shift;
-    my $key = shift;
-    my $sql;
-    my $sql_con = "";
-    if($key){
-        $sql = " and data_key = ?";
-    }
-    my $sql = "select data_value,data_key from app_extra_info where app_url_md5 = ? ".$sql_con." limit 1";
-    if($key){
-        my $row = $self-> { 'DB_Handle' }->selectrow_hashref($sql,undef,$app_url_md5,$key); 
-        if($row){
-            return $row->{data_value};
-        }
-    }
-    my $sth = $self-> {'DB_Handle'}->prepare($sql);
-    my @rows;
-    while(my $row = $sth->fetchrow_hashref){
-        push @rows, $row; 
-    }
-    return @rows;
+    my $sql = "select infomation from app_extra_info where app_url_md5=?";
+    my $hash = $self->{'DB_Handle'}->selectrow_hashref($sql,undef,$app_url_md5); 
+    return thaw($hash->{infomation}) if $hash;
+    return undef;
 }
 
 

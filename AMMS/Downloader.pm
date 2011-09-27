@@ -6,7 +6,6 @@ use LWP;
 use URI;
 use File::Basename;
 use LWP::MediaTypes qw(guess_media_type media_suffix);
-use vars qw/$UA/;
 
 sub new {
     my $proto = shift;
@@ -29,7 +28,7 @@ sub new {
 
     $self->{RESPONSE} =undef;
     $self->{REQUEST} = $request;
-    $self->{USERAGENT} = $UA || $ua;
+    $self->{USERAGENT} = $ua;
     $self->{TIMEOUT} = 120;
     $self->{URLRETRIES} = 3; 
     $self->{SUCCESS} = 0; 
