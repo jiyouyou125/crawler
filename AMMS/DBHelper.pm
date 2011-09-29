@@ -7,8 +7,7 @@ use LWP;
 use DBI;
 use AMMS::Config;
 use Digest::MD5 qw(md5_hex);
-use Data::Dumper;
-use Storable qw(thaw freeze);
+use JSON;
 
 my $singleton;
 
@@ -791,8 +790,8 @@ sub save_extra_info{
     my $self = shift;
     my $app_url_md5 = shift;
     my $data = shift;
-    my $seri_data = freeze($data);
-    my $sql = "replace into app_extra_info(app_url_md5,infomation) values(?,?)"; 
+    my $seri_data = encode_json($data);
+    my $sql = "replace into app_extra_info(app_url_md5,information) values(?,?)"; 
     my $sth = $self->{'DB_Handle'}->prepare($sql);
     $sth->execute($app_url_md5,$seri_data);
 }
@@ -800,9 +799,9 @@ sub save_extra_info{
 sub get_extra_info{
     my $self = shift;
     my $app_url_md5 = shift;
-    my $sql = "select infomation from app_extra_info where app_url_md5=?";
+    my $sql = "select information from app_extra_info where app_url_md5=?";
     my $hash = $self->{'DB_Handle'}->selectrow_hashref($sql,undef,$app_url_md5); 
-    return thaw($hash->{infomation}) if $hash;
+    return decode_json($hash->{information}) if $hash;
     return undef;
 }
 
