@@ -161,7 +161,7 @@ sub extract_app_info {
             $app_info->{author} = $matched{upload_author} || "巴士商店";
             $app_info->{price} = 0 if $matched{soft_nature} =~ /免费/;
             $app_info->{last_update} = $matched{publish_date};
-            $app_info->{size} = $1 if $matched{format_size} =~ /^\D+(\d+).*/;
+            $app_info->{size} = int($1*1024) if $matched{format_size} =~ /^\D+(\d+).*/;
             $app_info->{official_category} = $matched{soft_category};
             if (
                 defined( $category_mapping{ $app_info->{official_category} } ) )
