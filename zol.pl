@@ -28,24 +28,49 @@ my $url_base = "http://sj.zol.com.cn";
 my $downloader = new AMMS::Downloader;
 
 my %category_mapping = (
-    "同步软件" => 222,
-    "辅助软件" => 1,
-    "系统管理" => 1,
-    "中文输入" => 2217,
-    "红外蓝牙" => 22,
-    "同步备份" => 2200,
-    "文件管理" => 2202,
-    "固件补丁" => 22,
-    "影音播放" => 7,
-    "网络相关" => "4,18",
-    "安全助手" => 23,
-    "导航地图" => "13,21",
-    "应用工具" => 22,
-    "桌面插件" => 22,
-    "读书教育" => "1,5",
-    "游戏娱乐" => "6,8",
-    "即时通信" => 400,
-    "通信辅助" => 22,
+    "同步软件"    => 222,
+    "辅助软件"    => 1,
+    "系统管理"    => 1,
+    "中文输入"    => 2217,
+    "红外蓝牙"    => 22,
+    "同步备份"    => 2200,
+    "文件管理"    => 2202,
+    "固件补丁"    => 22,
+    "固件驱动"    => 22,
+    "影音播放"    => 7,
+    "影音媒体"    => 7,
+    "网络相关"    => "4,18",
+    "安全助手"    => 23,
+    "导航地图"    => "13,21",
+    "应用工具"    => 22,
+    "桌面插件"    => 22,
+    "读书教育"    => "1,5",
+    "游戏娱乐"    => "6,8",
+    "即时聊天"    => 400,
+    "即时通信"    => 400,
+    "通信辅助"    => 22,
+    "动作游戏"    => 823,
+    "策略战棋"    => 815,
+    "影像工具"    => 7,
+    "商务办公"    => "2,16",
+    "益智休闲"    => "808,818",
+    "射击游戏"    => 821,
+    "格斗游戏"    => 825,
+    "体育运动"    => 20,
+    "角色扮演"    => 812,
+    "主题壁纸"    => 12,
+    "主题插件"    => 12,
+    "中文输入法" => 2217,
+    "新闻资讯"    => 14,
+    "解谜冒险"    => 800,
+    "塔防游戏"    => 8,
+    "音乐游戏"    => 809,
+    "其它游戏"    => 8,
+    "飞行游戏"    => 826,
+    "Rom及补丁"    => 22,
+    "金融理财"    => 2,
+    "影音播放器" => 7,
+    "生活助手"   => 16,
 );
 
 die "\nplease check config parameter\n" unless init_gloabl_variable($conf_file);
@@ -88,22 +113,25 @@ sub extract_app_info {
 
     eval {
         $tree = HTML::TreeBuilder->new;
-        $webpage = decode("gb2312",$webpage);
+        $webpage = decode( "gb2312", $webpage );
         $tree->parse($webpage);
 
         #official category
-        if ( $webpage =~ /软件类型(?:.*?)<a[^>]+>(.*?)<\/a>/s ) {
-            open my $handle,">>","category.txt";
-            print $handle $1;
-            print $handle "\n";
-            close $handle;
-            $app_info->{official_category} = $1;
-        }
+        my $category_page_url = $tree->look_down(class => "page_url");
+        my @category_a = $category_page_url->find_by_tag_name("a");
+        $app_info->{official_category} = trim($category_a[1]->as_text) if ref $category_a[1];
 
         #trustgo_category_id
         if ( defined( $category_mapping{ $app_info->{official_category} } ) ) {
             $app_info->{trustgo_category_id} =
               $category_mapping{ $app_info->{official_category} };
+        }
+        else {
+            my $str = "Out of TrustGo category:" . $app_info->{app_url_md5};
+            open( OUT, ">>/home/nightlord/outofcat.txt" );
+            print OUT "$str\n";
+            close(OUT);
+            die "Out of Category";
         }
 
      #last_update app_name current_version total_install_times get from database
@@ -119,28 +147,48 @@ sub extract_app_info {
             $app_info->{size} = $app_extra_info->{size};
         }
 
+        #app_price
+        $app_info->{price} = 0;
+
         #descripton
         my $node = $tree->look_down( id => "info_more" );
-        my $description_info = $node->as_text;
-        $app_info->{description} =
-          $description_info =~ s/\[.收起全部简介\]//;
+        if ($node) {
+            my $description_info = $node->as_text;
+            $description_info =~ s/\[.收起全部简介\]//;
+            $app_info->{description} = $description_info;
+        }
+        if ( not defined($node) ) {
+            my @main_class = $tree->look_down( class => "main" );
+            $app_info->{description} = $main_class[2]->as_text
+              if ref $main_class[2];
+        }
 
         #icon
         my $main_class_first = $tree->look_down( class => "main" );
         my $icon_img = $main_class_first->find_by_tag_name("img");
         $app_info->{icon} = $icon_img->attr("src");
 
+        #apk_url
+        if ( $webpage =~ /电信下载.*?'(\/down\.php.*?)'.*?/s ) {
+            $app_info->{apk_url} = $url_base . $1 . "0";
+        }
+
         #screens
         my $screen_pre = $main_class_first->find_by_tag_name("a");
         my $downloader = new AMMS::Downloader;
-        my $res        = $downloader->download(
-            $url_base.$screen_pre->attr("href"));
-        if ($res) {
+        my $res =
+          $downloader->download( $url_base . $screen_pre->attr("href") );
+        my $screenshot_num;
+        if ( $webpage =~ /软件截图.*?\((\d+)\)/s ) {
+            $screenshot_num = $1;
+        }
+        if ( $res && $screenshot_num ne "0" ) {
             my @screens;
             my $content = $res;
-            my $tree_s  = HTML::TreeBuilder->new;
+            $content = decode( "gb2312", $content );
+            my $tree_s = HTML::TreeBuilder->new;
             $tree_s->parse($content);
-            my $main = $tree->look_down( class => "main" );
+            my $main = $tree_s->look_down( class => "main" );
             my @img_tags = $main->look_down( "_tag", "img" );
             foreach my $img (@img_tags) {
                 my $img_src = $img->attr("src");
@@ -161,8 +209,8 @@ sub extract_page_list {
 
     my ( $worker, $hook, $params, $pages ) = @_;
 
-    my $webpage     = $params->{'web_page'};
-    $webpage = decode("gb2312",$webpage);
+    my $webpage = $params->{'web_page'};
+    $webpage = decode( "gb2312", $webpage );
     my $total_pages = 0;
     eval {
         my $per_page;
@@ -178,8 +226,7 @@ sub extract_page_list {
                 my $page_tmp = $1;
                 my $page_base = $1 if $page_tmp =~ /(.*?_)\d+\.html/;
                 for ( 1 .. $total_pages ) {
-                    push @{$pages},
-                       $url_base."". $page_base.$_ .".html";
+                    push @{$pages}, $url_base . "" . $page_base . $_ . ".html";
                 }
             }
         }
@@ -198,26 +245,29 @@ sub extract_app_from_feeder {
     eval {
         my $webpage = $params->{'web_page'};
 
-        $webpage = decode("gb2312",$webpage);
+        $webpage = decode( "gb2312", $webpage );
         $tree = HTML::TreeBuilder->new;
         my $dbh = new AMMS::DBHelper;
         $tree->no_expand_entities(1);
         $tree->parse($webpage);
-        my @nodes =
-          $tree->look_down( "_tag", "dl", sub{ defined($_[0]->attr("id"))&& $_[0]->attr("id") =~ /^module/;} );
+        my @nodes = $tree->look_down(
+            "_tag", "dl",
+            sub {
+                defined( $_[0]->attr("id") ) && $_[0]->attr("id") =~ /^module/;
+            }
+        );
         for my $node (@nodes) {
 
             #app_url
-            my $a_tag = $node->find_by_tag_name("a");
-            my $app_url =
-              $url_base."".$a_tag->attr("href");
+            my $a_tag   = $node->find_by_tag_name("a");
+            my $app_url = $url_base . "" . $a_tag->attr("href");
             $apps->{$1} = $app_url
               if basename( $a_tag->attr("href") ) =~ /(\d+)/;
             my $dd_tag    = $node->find_by_tag_name("dd");
             my @span_tag  = $dd_tag->find_by_tag_name("span");
             my $name_info = $dd_tag->find_by_tag_name("a")->as_text;
             my ( $app_name, $app_version ) =
-              ( $name_info =~ /(.*?)[vV]?((?:\d\.)+\d).*/ );
+              ( $name_info =~ /(.*?)[vV]?([\d\.]+).*/ );
 
             if ( scalar @span_tag ) {
 
