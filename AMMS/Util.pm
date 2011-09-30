@@ -219,7 +219,7 @@ sub check_host_status
 
 	   if($resp=~/(\d+\.*\d*)/)
     {
-        $conf->getAttribute('LOGGER')->error("the disk space is less than 5G,please check!!") and return 0 if($1<2);
+        $conf->getAttribute('LOGGER')->error("the disk space is less than 5G,please check!!") and return 0 if($1<1);
     }
 
 #network status
