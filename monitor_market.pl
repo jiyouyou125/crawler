@@ -26,9 +26,9 @@ my %program_table = (
         'goapk'=>{'host'=>'www.goapk.com','script'=>'goapk.pl','task_type'=>[qw(find_app new_app update_app )]},
         'dangle'=>{'host'=>'android.d.cn','script'=>'dangle.pl','task_type'=>[qw(find_app new_app  update_app )]},
         'nduoa'=>{'host'=>'www.nduoa.com','script'=>'nduoa.pl','task_type'=>[qw(find_app new_app  update_app )]},
-		'tgbus' =>{'host'=>'dg.tgbus.com','script'=>'tgbus.pl','task_type'=>[qw(find_app)]},
+		'tgbus' =>{'host'=>'dg.tgbus.com','script'=>'tgbus.pl','task_type'=>[qw(new_app)]},
         'anfone'=>{'host'=>'www.anfone.com','script'=>'anfone.pl','task_type'=>[qw(find_app new_app  update_app )]},
-        'tgbus'=>{'host'=>'dg.tgbus.com','script'=>'tgbug.pl','task_type'=>[qw(find_app new_app  update_app )]},
+        'zol' => {'host' => 'sj.zol.com.cn', 'script' => 'zol.pl','task_type' => [qw(find_app new_app)]},
         );
 
 foreach( @markets_be_monitored )

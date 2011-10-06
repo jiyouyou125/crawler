@@ -872,7 +872,7 @@ sub check_app_info{
 
     return 0 if( $app_info->{'status'} eq 'fail' );
 
-    return 0 if (not defined $app_info->{'app_name'} 
+    if (not defined $app_info->{'app_name'} 
             or not defined $app_info->{'official_category'}
             or not defined $app_info->{'trustgo_category_id'}
             or not defined $app_info->{'last_update'}
@@ -882,7 +882,13 @@ sub check_app_info{
             or not defined $app_info->{'current_version'} 
             or not defined $app_info->{'app_url'} 
             or not defined $app_info->{'description'} 
-            );
+            )
+            {
+                open my $handle,">>","/home/nightlord/lack_app_info.txt";
+                print $handle Dumper($app_info);
+                close $handle;
+                return 0;
+            }
 
     return 1;
 }
