@@ -23,6 +23,7 @@ use warnings;
 use 5.010;
 use Mojo::UserAgent;
 use Mojo::IOLoop;
+use DBI;
 
 my @feeder = ();
 my @page_list = ();
@@ -30,6 +31,7 @@ my @urls = ();
 
 my $ua = Mojo::UserAgent->new(max_redirects => 5);
 my $crawl;
+
 $crawl = sub{
 	my $id = shift;
 	return Mojo::IOLoop->timer( 2 => sub { $crawl->($id)});
@@ -63,3 +65,9 @@ sub extract_app_info{
 
 }
 
+sub get_feeder_url{
+    my($market_id) = @_;
+    $sql = "select * from feeder where market_id=?";
+    my $smt = $dbh->prepare($sql);
+    $smt->excute($market_id);
+}

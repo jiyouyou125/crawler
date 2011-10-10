@@ -51,21 +51,23 @@ sub run_one_time
         $status='success'; 
         $tarfile="$sample_dir/$hash->{package_name}";
         if( -e $tarfile ){
-            my $cmd="cp $tarfile $analytic_dir/; cp $tarfile $cloud_dir/";
-            $status='fail' and next unless &replace_old_app($tarfile);#save  local copy
+#my $cmd="cp $tarfile $analytic_dir/; cp $tarfile $cloud_dir/; cp $tarfile /mnt/bakup/market";
+            my $cmd=" cp $tarfile $cloud_dir/; cp $tarfile /mnt/bakup/market";
+#$status='fail' and next unless &replace_old_app($tarfile);#save  local copy
             $status='fail' and next unless &execute_cmd($cmd);
             open(FH,">$tarfile.ready") or die "Can't create $tarfile ready file: $!";
             close(FH);
-            $cmd="cp $tarfile.ready $analytic_dir/;cp $tarfile.ready $cloud_dir/";
+            #$cmd="cp $tarfile.ready $analytic_dir/;cp $tarfile.ready $cloud_dir/";
+            $cmd="cp $tarfile.ready $cloud_dir/";
             $status='fail' and next unless &execute_cmd($cmd);
         }
     }continue{
         if ($status eq 'success'){
             unlink($tarfile);           
         }else{
-            unlink("$analytic_dir/$hash->{package_name}");           
+            #unlink("$analytic_dir/$hash->{package_name}");           
             unlink("$cloud_dir/$hash->{package_name}");           
-            unlink("$analytic_dir/".$hash->{package_name}.".ready");           
+            #unlink("$analytic_dir/".$hash->{package_name}.".ready");           
             unlink("$cloud_dir/".$hash->{package_name}.".ready");           
         }
         unlink("$tarfile.ready");

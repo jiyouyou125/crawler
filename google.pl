@@ -14,6 +14,7 @@ use Digest::MD5 qw(md5_hex);
 use HTML::Entities;
 use English;
 use utf8;
+use open ':utf8';
 
 use AMMS::Util;
 use AMMS::AppFinder;
@@ -41,6 +42,7 @@ my $downloader  = new AMMS::Downloader;
 die "\nplease check config parameter\n" unless init_gloabl_variable( $conf_file );
 die "\nfail o init apk downloader context\n" unless &init_apk_context;
 
+my $app_main_dir=$conf->getAttribute( 'TempFolder' );
 
 my %month_map = (
         "January"=>"1","February"=>"2","March"=>"3","April"=>"4",
@@ -85,6 +87,10 @@ my %category_mapping= (
     "Widgets"=>820,
         );
 
+my $db_handle=$db_helper->get_db_handle();
+my $sql ="replace into google_multi_lang set app_url_md5=?, status=?,en=?, zh_cn=?";
+my $sth =$db_handle->prepare($sql);
+
 
 if( $task_type eq 'find_app' )##find new android app
 {
@@ -95,16 +101,18 @@ if( $task_type eq 'find_app' )##find new android app
 }
 elsif( $task_type eq 'new_app' )##download new app info and apk
 {
-    my $NewAppExtractor= new AMMS::NewAppExtractor('MARKET'=>$market,'TASK_TYPE'=>$task_type,'NEXT_TASK_TYPE'=>'multi-lang');
+#my $NewAppExtractor= new AMMS::NewAppExtractor('MARKET'=>$market,'TASK_TYPE'=>$task_type,'NEXT_TASK_TYPE'=>'multi-lang');
+    my $NewAppExtractor= new AMMS::NewAppExtractor('MARKET'=>$market,'TASK_TYPE'=>$task_type);
     $NewAppExtractor->addHook('extract_app_info', \&extract_app_info);
     $NewAppExtractor->addHook('download_app_apk', \&download_app_apk);
     $NewAppExtractor->addHook('language_suffix', \&language_suffix);
+    $NewAppExtractor->addHook('extra_processing', \&extra_processing);
     $NewAppExtractor->run($task_id);
 }
 elsif( $task_type eq 'update_app' )##download updated app info and apk
 {
     my $UpdatedAppExtractor= new AMMS::UpdatedAppExtractor('MARKET'=>$market,'TASK_TYPE'=>$task_type);
-    $UpdatedAppExtractor->addHook('extract_app_info', \&extract_app_info);
+    $UpdatedAppExtractor->addHook('extra_processing', \&extra_processing);
     $UpdatedAppExtractor->addHook('download_app_apk', \&download_app_apk);
     $UpdatedAppExtractor->addHook('language_suffix', \&language_suffix);
     $UpdatedAppExtractor->run($task_id);
@@ -151,6 +159,8 @@ sub extract_app_info
         $app_info->{trustgo_category_id}="-1";
         if (defined($category_mapping{$app_info->{official_category}})){
             $app_info->{trustgo_category_id}=$category_mapping{$app_info->{official_category}};
+        }else{
+            die "Out of TrustGo category";
         }
 
         @metas = $tree->find_by_attribute('itemprop','name');
@@ -168,7 +178,7 @@ sub extract_app_info
         $app_info->{official_rating_times}=$1 if ref $meta and $meta->as_text =~ /([\d,]+)/;
         $app_info->{official_rating_times} =~ s/,//g;
 
-        $meta=$tree->find_by_attribute('itemprop','publishDate');
+        $meta=$tree->find_by_attribute('itemprop','datePublished');
         my $date_str = $meta->as_text; 
         $date_str =~ s/,/ /g;
         my ($monthy, $day, $year) = split " +", $date_str;
@@ -242,7 +252,7 @@ sub extract_app_info
                 push @{$app_info->{screenshot}},$_->attr("src");
             }
         }
-
+      
         @node = $tree->look_down(_tag=>"object",class=>"doc-video");
         if (scalar @node) {
             @tag = $node[0]->find_by_tag_name("embed");
@@ -323,7 +333,7 @@ sub init_apk_context{
     $device_id='4500701539983183731';
     $apk_download_url='http://android.clients.google.com/market/download/Download';
     $market_api_url='http://android.clients.google.com/market/api/ApiRequest';
-    $auth_sub_token='DQAAALQAAACsAQnkrAOS7UJx7WhHfc9QeeE0Cj43HEPJgMTV5F5BxNVdNbavvOCETdycyZEmZOebzDRroVp0IfZtH2TwuMMVmMc-W-oxYDl03sAQ3tKlQIVqz_0zgkE04J8_KNMb0cyswERFI8XTWb8RYbwCHX24fJG-tCnFtj3XO6bl4cloE8rWXX0GwuVlG4jTmo6iBZdraKKoPXIF9dzcjsKQomWUE-y3h2FTzoDGMCZSOghqr0HlZ0XApZwK_4mxepQ3Q5M';
+    $auth_sub_token='DQAAALMAAAAPS6fCA-S31NgqQO2nkxNsqLK2ZDqmdEVVsJfkslwTdFNK72TxiONRy5xCdqpszQ2aibjCvyhxYgLPi8KeiQipzxHPiypLhAdiA8HIPLRczPuPI1HznAlBYdKwRAP3PmxWU2F2AacveRnAD9jPaaCAFey-RVnFdXJMpAS8YbuZ7rHmEc-4z5Gcwnc4ZlhS8BglU6uB6NrkqN9fJiWbtLqVy1Hu2FvChven2Xa4r3s3iDZdydATI-y1nO6BgVFJMmA';
 
     $context = RequestContext->new;
     $context->unknown1(0);
@@ -341,6 +351,51 @@ sub init_apk_context{
     $context->authSubToken($auth_sub_token);
 }
 
+sub extra_processing
+{
+    my $self        = shift;
+    my $hook_name   = shift;
+    my $en_app_info    = shift;
+
+    my $web_page;
+    my %app_info;
+    my $downloader  = new AMMS::Downloader;
+    my $lang="zh_cn";
+    my $url_md5 =   $en_app_info->{'app_url_md5'};
+    my $app_dir = $app_main_dir."/".get_app_dir( $market,$url_md5);
+
+    print "start download $url_md5 $lang version\n";
+
+    $downloader->timeout($conf->getAttribute('WebpageDownloadMaxTime'));
+    $web_page= $downloader->download($en_app_info->{app_url}."&hl=$lang");
+    return unless $downloader->is_success;
+
+    utf8::decode($web_page);
+    $logger->error("fail to extract $lang version") and return unless extract_simple_app_info($web_page, \%app_info);
+        
+    my $file="$app_dir/header/$lang";
+    open( HEADER,">$file");
+    print HEADER "app_name=".$app_info{app_name}."\n";
+    print HEADER "author=".$app_info{author}."\n";
+    close( HEADER );
+
+    $file="$app_dir/description/$lang";
+    open( DESC,">$file");
+    print DESC $app_info{description};
+    close( DESC);
+
+    $file = "$app_dir/page/$lang";
+    open( PAGE,">$file");
+    print PAGE $web_page;
+    close( PAGE);
+
+    $sth->execute($url_md5,"success",1,1);
+    print "end processing $url_md5\n";
+
+    return;
+}
+
+
 sub download_app_apk 
 {
     my $self    = shift;
@@ -356,12 +411,11 @@ sub download_app_apk
     $app_package_name='';
     $app_package_name=$1 if $apk_info->{app_url}=~/https:\/\/market.android.com\/details\?id=(.*)/;
     $apk_info->{'apk_url'}=$app_package_name;
+    $apk_info->{'app_package_name'}=$app_package_name;
     if( $apk_info->{price} ne '0' ){
         $apk_info->{'status'}='paid';
         return 1;
     }
-    $apk_info->{'status'}='undo';
-    return 1;
     eval { 
         rmtree($apk_dir) if -e $apk_dir;
         mkpath($apk_dir);
@@ -382,7 +436,7 @@ sub download_app_apk
     }
 
     my $asset_id = &get_assetid();
-    if ($asset_id eq 'fail' or $asset_id eq 'paid')
+    if ($asset_id eq 'fail' or $asset_id eq 'paid' or $asset_id eq 'undo')
     {
         $apk_info->{'status'}=$asset_id;
         return 0;
@@ -390,7 +444,7 @@ sub download_app_apk
     print("end get asset id\n");
 
     print("start download apk\n");
-    my $unique_name = &download_apk($apk_dir,$asset_id) ;
+    my $unique_name = &download_apk($apk_dir,$asset_id,$apk_info) ;
     if (not $unique_name)
     {
         $apk_info->{'status'}='fail';
@@ -449,7 +503,7 @@ sub get_assetid{
 
     if($app_response->{entriesCount} == 0){
         warn("\nFail to get info for $app_package_name, entry count is zero");
-        return 'fail';
+        return 'undo';
     }
 
     my $app_info = $app_response->{app};
@@ -462,19 +516,40 @@ sub get_assetid{
 sub download_apk {
     my $apk_dir=shift;
     my $assetid=shift;
+    my $apk_info=shift;
 ##download app
     my $url_string="$apk_download_url?userId=$user_id&deviceId=$device_id&assetId=$assetid";
 
     my $ua = LWP::UserAgent->new();
     $ua->agent("AndroidDownloadManager");
     $ua->default_header('Cookie'=>"ANDROID=$auth_sub_token");
-    my $response = $ua->get($url_string);
+
+    my $retry=0;
+    my $response;
+
+    do{
+        ++$retry;
+        eval{
+            local $SIG{ALRM} = sub   {   die "download timeout"};
+            alarm(300);
+            $response = $ua->get($url_string);
+            alarm(0);
+        };
+        alarm(0);
+        unless ($response->is_success){
+            warn "fail to get apk for $apk_download_url";
+            $logger->error("fail to get apk for $apk_download_url, error code:403") if $response->code==403;
+            sleep(60*$retry);
+        }
+    }while( !$response->is_success and $retry<5); 
+
     if( !$response->is_success ) {
         return 0;
     }
- 
+
     #create apk file 
-    my $unique_name=md5_hex($response->content)."__".$app_package_name;
+    $apk_info->{apk_md5}=md5_hex($response->content);
+    my $unique_name=$apk_info->{apk_md5}."__".$app_package_name;
     eval { 
         rmtree($apk_dir) if -e $apk_dir;
         mkpath($apk_dir);
@@ -494,7 +569,7 @@ sub download_apk {
     return $unique_name;
 }
 
-sub extra_processing
+sub extra_processing_use
 {
     my ($worker, $hook, $app_info) = @_;
 
@@ -514,3 +589,51 @@ sub extra_processing
 }
 
 
+sub extract_simple_app_info
+{
+    my $tree;
+    my @node;
+    my @tags;
+    my @kids;
+    my ($webpage, $app_info) = @_;
+
+    eval {
+        $tree = HTML::TreeBuilder->new; # empty tree
+        $tree->warn(1);
+        $tree->implicit_tags(0);
+        $tree->parse($webpage);
+
+        my @nodes = $tree->find_by_attribute('class','doc-metadata-list');
+        my @metas = $nodes[0]->content_list;
+        @metas = $tree->find_by_attribute('itemprop','name');
+        $app_info->{app_name}=$metas[0]->attr('content');
+        $app_info->{author}='Unknow';
+        $app_info->{author}=$metas[1]->attr('content');
+        @metas=$tree->find_by_attribute('itemprop','price');
+        $app_info->{price}= $metas[0]->as_text;
+        $app_info->{price}= 0 if $metas[0]->as_text =~ /free/i;
+        $app_info->{price}= "RMB:$1" if $metas[0]->as_text =~ /￥([\d\.]+)/i;
+
+        if ($webpage =~ /id="doc-original-text">(.*?)<\/div>/s){
+            $app_info->{description}=$1; 
+            $app_info->{description}=~s/<p>/__p/g;
+            $app_info->{description}=~s/<\/p>/___p/g;
+            $app_info->{description}=~s/<br>/__br/g;
+            $app_info->{description}=~s/<.*?>//ig;
+            $app_info->{description}=~s/___p/<\/p>/g;
+            $app_info->{description}=~s/__p/<p>/g;
+            $app_info->{description}=~s/__br/<br>/g;
+            $app_info->{description}=~s/__br/<br>/g;
+            decode_entities( $app_info->{description});
+        }
+ 
+        $tree = $tree->delete;
+    };
+
+    if( $@){
+        $app_info->{status}='fail';
+        return 0;
+    }
+
+    return scalar %{$app_info};
+}

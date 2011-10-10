@@ -55,7 +55,8 @@ my %ATTRIBUTE_DEFAULT = (
 my %SUPPORTED_HOOKS = (
     'extract_app_info'          => 'extract all app info from app webpage',
     'download_app_apk'          => 'download app apk',
-    'language_suffix'          => 'support language',
+    'language_suffix'           => 'support language',
+    'extra_processing'          => 'extra processing, for example multi-lang',
 #    'continue-test'             => 'return true if should continue iterating',
 #    'modified-since'            => 'returns modified-since time for URL passed',
 );
@@ -193,6 +194,7 @@ sub get_app_result
         $apk_info{'apk_url'} = $app_info{'apk_url'};
         $apk_info{'price'} = $app_info{'price'};
         $apk_info{'size'} = $app_info{'size'};
+        $apk_info{'app_package_name'} = $app_info{'app_package_name'};
         $self->invoke_hook_functions('download_app_apk', \%apk_info);
 
         $app_info{ 'status'  } = 'success';
@@ -820,7 +822,8 @@ sub download_app_apk
         return 0;
     }
 
-    my $unique_name=md5_hex("$apk_dir/$apk_file")."__".$apk_file;
+    $apk_info->{apk_md5}=file_md5("$apk_dir/$apk_file");
+    my $unique_name=$apk_info->{apk_md5}."__".$apk_file;
 
     rename("$apk_dir/$apk_file","$apk_dir/$unique_name");
 
@@ -908,7 +911,7 @@ sub generate_meta_file
     my $apk_info=$app->{apk_info};
     print "app_unique_name=".$app_info->{'app_url_md5'}; 
     print "\napp_name=".$app_info->{'app_name'} if exists $app_info->{'app_name'}; 
-    print "\napp_unique_package_name=".$app_info->{'app_unique_package_name'}; 
+    print "\napp_unique_package_name=".$apk_info->{'app_package_name'}; 
     print "\nofficial_category=".$app_info->{'official_category'}; 
     print "\nsub_official_category=".$app_info->{'sub_official_category'}; 
     print "\ntrustgo_category=".$app_info->{'trustgo_category_id'}; 

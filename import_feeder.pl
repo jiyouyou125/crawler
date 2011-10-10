@@ -23,6 +23,7 @@ my %market_feed     = (
 	'www.189store.com' =>'189store.url',
     'dg.tgbus.com'=>'tgbus.url',
     'sj.zol.com.cn' => 'zol.url',
+    'www.brothersoft.com' => 'brothersoft.url',
     'm.1mobile.com' => '1mobile.url',
         );
 

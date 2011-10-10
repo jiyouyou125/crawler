@@ -517,13 +517,18 @@ sub insert_apk_info
     my $app_url_md5 = $apk_info->{'app_url_md5'}; 
    
     ##invaild app url,don't insert into app_info
-    return  1 if $apk_info->{'status'} eq 'invalid'; 
+#return  1 if $apk_info->{'status'} eq 'success'; 
 
     #insert new apps into apk table
     my $sql = "replace into app_apk set ";
     $sql .= " app_url_md5='$app_url_md5'";
     $sql .= ",status='".$apk_info->{'status'}."'";
     $sql .= ",insert_time=now()";
+    $sql .= ",updated_times=now()";
+    $sql .= ",first_visited_time=now()";
+    $sql .= ",last_visited_time=now()";
+    $sql .= ",last_modified_time=now()";
+    $sql .= ",apk_md5='$apk_info->{apk_md5}'";
     $sql .= ",apk_url=".$self->{ 'DB_Handle' }->quote($apk_info->{'apk_url'});
     if ($apk_info->{'status'} eq 'success') 
     {
@@ -688,13 +693,23 @@ sub update_apk_info
 
     return 1 if $status ne 'success';
 
-    my $sql = "update app_apk set ";
+    my $sql="select updated_times,visited_times from app_apk where app_url_md5='$app_url_md5'";
+    my $sth=$self->{'DB_Handle'}->prepare($sql);
+    $sth->execute;
+
+    my ($updated_times,$visited_times)=$sth->fetchrow();
+    $updated_times++;
+
+
+    $sql = "update app_apk set ";
     $sql .= " last_visited_time=now()";
+    $sql .= " last_modified_time=now()";
     $sql .= ",status='$status'";
     $sql .= $self->concatenate_string_field('apk_url',$apk_info);
     if ($status eq 'success') 
     {
     $sql .= ",need_submmit='yes'";
+    $sql .= ",updated_times=$updated_times";
     $sql .= $self->concatenate_string_field('app_unique_name',$apk_info);
     } 
     else

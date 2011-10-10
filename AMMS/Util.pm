@@ -15,7 +15,7 @@ BEGIN
     # Set up the exports.
     our @EXPORT = qw(
             $conf $db_helper $logger 
-            trim ltrim rtrim
+            trim ltrim rtrim file_md5
             get_app_dir
             execute_cmd
             send_file_to_server
@@ -262,6 +262,14 @@ sub rtrim($)
     $string =~ s/\s+$//;
     return $string;
 }
+
+sub file_md5{
+    my $file=shift;
+    open (FILE,"$file");
+    binmode(FILE);
+    return Digest::MD5->new->addfile(*FILE)->hexdigest;
+}
+
 1;
 
 __END__

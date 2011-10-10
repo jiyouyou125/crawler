@@ -819,7 +819,8 @@ sub download_app_apk
         return 0;
     }
 
-    my $unique_name=md5_hex("$apk_dir/$apk_file")."__".$apk_file;
+    $apk_info->{apk_md5}=file_md5("$apk_dir/$apk_file");
+    my $unique_name=$apk_info->{apk_md5}."__".$apk_file;
 
     rename("$apk_dir/$apk_file","$apk_dir/$unique_name");
 
