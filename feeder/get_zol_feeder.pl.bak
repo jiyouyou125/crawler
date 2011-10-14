@@ -1,0 +1,34 @@
+use strict;
+use LWP::UserAgent;
+use HTML::TreeBuilder;
+use IO::Handle;
+    
+my $ua = LWP::UserAgent->new;
+$ua->timeout(60);
+$ua->env_proxy;
+
+open(FEED,">zol.url");
+FEED->autoflush(1);
+
+my $portal="http://sj.zol.com.cn/android/";
+my $url_base="http://sj.zol.com.cn";
+
+my $response = $ua->get($portal);
+
+while( not $response->is_success){
+    $response=$ua->get($portal);
+}
+                                         
+if ($response->is_success) {
+    my $webpage=$response->content;
+
+    my @a_links = ($webpage =~ /(\/sys_sub[^"]+)/mg); 
+    die "fail to extract goapk feeder url" unless (scalar @a_links); 
+    foreach(@a_links){
+        next unless defined $_;
+        print FEED $url_base.$_."\n";
+    }
+
+}
+close(FEED);
+exit;
