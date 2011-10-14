@@ -25,6 +25,7 @@ my %market_feed     = (
     'sj.zol.com.cn' => 'zol.url',
     'www.brothersoft.com' => 'brothersoft.url',
     'm.1mobile.com' => '1mobile.url',
+    'www.mobango.com' => 'mobango.url',
         );
 
 die "\nplease check config parameter\n" unless init_gloabl_variable( $conf_file );

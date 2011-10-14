@@ -490,6 +490,7 @@ sub insert_app_info
     $sql .= $self->concatenate_string_field( 'author', $app_info );
     $sql .= $self->concatenate_string_field( 'app_qr', $app_info );
     $sql .= $self->concatenate_string_field( 'trustgo_category_id',$app_info );
+    $sql .= $self->concatenate_string_field( 'apk_md5',$app_info );
     $sql .= $self->concatenate_numeric_field( 'size', $app_info );
     $sql .= $self->concatenate_numeric_field( 'official_rating_stars',$app_info );
     $sql .= $self->concatenate_numeric_field( 'official_rating_times',$app_info );
@@ -497,9 +498,10 @@ sub insert_app_info
 
     if($self->{ 'DB_Handle' }->do($sql)<=0)
     {
+        print $sql,"\n";
         $self->{ 'CONFIG_HANDLE' }->getAttribute('LOGGER')->error(
-                sprintf("fail to save app, App URL MD5:%s, Error:%s",
-                        $app_url_md5,$self->{'DB_Handle'}->errstr
+                sprintf("fail to save app, App URL MD5:%s, Error:%s:%s",
+                        $app_url_md5,$self->{'DB_Handle'}->errstr,$sql
                     )
             );
         $app_info->{ 'status' } ='fail';
@@ -517,7 +519,7 @@ sub insert_apk_info
     my $app_url_md5 = $apk_info->{'app_url_md5'}; 
    
     ##invaild app url,don't insert into app_info
-#return  1 if $apk_info->{'status'} eq 'success'; 
+    return  1 if $apk_info->{'status'} ne 'success'; 
 
     #insert new apps into apk table
     my $sql = "replace into app_apk set ";
@@ -633,6 +635,7 @@ sub update_app_info
         $sql .= $self->concatenate_string_field( 'author', $app_info );
         $sql .= $self->concatenate_string_field( 'app_qr', $app_info );
         $sql .= $self->concatenate_string_field( 'trustgo_category_id',$app_info );
+        $sql .= $self->concatenate_string_field( 'apk_md5',$app_info );
         $sql .= $self->concatenate_numeric_field( 'size', $app_info );
         $sql .= $self->concatenate_numeric_field( 'official_rating_stars',$app_info );
         $sql .= $self->concatenate_numeric_field( 'official_rating_times',$app_info );

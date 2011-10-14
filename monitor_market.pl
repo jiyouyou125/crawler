@@ -29,8 +29,9 @@ my %program_table = (
 		'tgbus' =>{'host'=>'dg.tgbus.com','script'=>'tgbus.pl','task_type'=>[qw(new_app)]},
         'anfone'=>{'host'=>'www.anfone.com','script'=>'anfone.pl','task_type'=>[qw(find_app new_app  update_app )]},
         'zol' => {'host' => 'sj.zol.com.cn', 'script' => 'zol.pl','task_type' => [qw(find_app new_app)]},
-        "1mobile"=> {'host' => 'm.1mobile.com','script' => '1mobile.pl','task_type'=>[qw(new_app)]},
+        "1mobile"=> {'host' => 'm.1mobile.com','script' => '1mobile.pl','task_type'=>[qw(find_app new_app)]},
         "brothersoft" => {'host'=>'www.brothersoft.com', 'script' => 'brothersoft.pl', 'task_type' => [qw(find_app new_app)]},
+        "mobango" => { 'host' => 'www.mobango.com', 'script' => 'mobango.pl', 'task_type'=>[qw(find_app new_app)]},
         );
 
 foreach( @markets_be_monitored )

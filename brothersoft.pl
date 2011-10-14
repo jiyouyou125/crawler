@@ -28,32 +28,32 @@ my $url_base = "http://www.brothersoft.com";
 my $downloader = new AMMS::Downloader;
 
 my %category_mapping = (
-    'Business' => 2,
-    'Communication' => 4,
-    'Ebooks & Reference'=> 1,
-    'Email & SMS' => 4,
-    'Entertainment'=> 6,
-    'Food & Health' => 9,
-    'GPS & Travel' => 21,
-    'Home & Education' => 5,
-    'Internet' => 2216,
-    'Mobile Dictionary' => 103,
-    'MP3 & Audio' => 7,
-    'News & Weather' => 14,
-    'Photo & Graphics' => 15,
-    'Social Networking' => 18,
-    'Utilities' => 22,
-    'Video' => 707,
-    'Action' => 823,
-    'Adventure' => 800,
-    'Card & Casino' => "803,804",
-    'Miscellaneous' => 8,
-    'Puzzle' => 810,
-    'RPG' => 812,
-    'Shooting' => 821,
-    'Sports' => 814,
-    'Strategy' => 815,
-    'Tower Defense' => 8,
+    'Business'           => 2,
+    'Communication'      => 4,
+    'Ebooks & Reference' => 1,
+    'Email & SMS'        => 4,
+    'Entertainment'      => 6,
+    'Food & Health'      => 9,
+    'GPS & Travel'       => 21,
+    'Home & Education'   => 5,
+    'Internet'           => 2216,
+    'Mobile Dictionary'  => 103,
+    'MP3 & Audio'        => 7,
+    'News & Weather'     => 14,
+    'Photo & Graphics'   => 15,
+    'Social Networking'  => 18,
+    'Utilities'          => 22,
+    'Video'              => 707,
+    'Action'             => 823,
+    'Adventure'          => 800,
+    'Card & Casino'      => "803,804",
+    'Miscellaneous'      => 8,
+    'Puzzle'             => 810,
+    'RPG'                => 812,
+    'Shooting'           => 821,
+    'Sports'             => 814,
+    'Strategy'           => 815,
+    'Tower Defense'      => 8,
 );
 
 die "\nplease check config parameter\n" unless init_gloabl_variable($conf_file);
@@ -101,7 +101,7 @@ sub extract_app_info {
 
         #category
         my $sub_nav = $tree->look_down( class => "subNav2" );
-        
+
         if ( $sub_nav->as_HTML =~ /You are here:.*<a[^>]+>(.*?)<\/a>/g ) {
             $app_info->{official_category} = decode_entities($1);
             if (
@@ -110,9 +110,6 @@ sub extract_app_info {
                 $app_info->{trustgo_category_id} =
                   $category_mapping{ $app_info->{official_category} };
             }
-            else {
-                &save_out_of_category($app_info->{app_url_md5});
-            }
         }
 
         #app_name,version
@@ -120,7 +117,12 @@ sub extract_app_info {
         if ($app_ver) {
             my $app_ver_h2 = $app_ver->find_by_tag_name("h2");
             ( $app_info->{app_name}, $app_info->{current_version} ) =
-              ( $app_ver_h2->as_text =~ /(.*?)[vV]?([\.\d]+).*/ );
+              ( $app_ver_h2->as_text =~ /(.*)[vV]?(?<= )([\.\d]+)/ );
+            if ( not defined( $app_info->{current_version} ) ) {
+                $app_info->{current_version} = 0;
+                $app_info->{app_name}        = trim( $app_ver_h2->as_text );
+            }
+            $app_info->{app_name} = trim($app_info->{app_name});
         }
 
         #download_last_week
@@ -129,13 +131,14 @@ sub extract_app_info {
         my $down_load_url = $url_base . $down_load_a->attr("href");
         my $download_html = $download_btn->as_HTML;
         if ( $download_html =~ m{Downloads of Last Week:\s*(\d+)} ) {
-
+            $app_info->{total_install_times} = $1;
         }
 
         #size
         if ( $download_html =~ m{<span>(.*?)</span>} ) {
             $app_info->{size} = kb_m($1);
         }
+        $app_info->{size} = 0 if not defined($app_info->{size});
 
         #screenshot
         my $screen_node = $tree->look_down( class => "program_r" );
@@ -144,9 +147,21 @@ sub extract_app_info {
 
         #last_update,author,price
         my $license = $tree->look_down( class => "license" );
-        my $license_price = $license->look_down("_tag","div","class","free_p");
-        my ( $license_text, $price ) = ( $license_price->as_text =~ /:(.*?)\/(.*)/ );
-        $app_info->{price} = 0 if $price =~ /Free/;
+        my $license_price =
+          $license->look_down( "_tag", "div", "class", "free_p" );
+        my ( $license_text, $price ) =
+          ( $license_price->as_text =~ /:(.*?)\/(.*)/ );
+        $app_info->{price} = 0 if $price =~ /(Free|-)/;
+        $app_info->{price} = "USD:".$1  if $price =~ /\$([.\d]+)/;
+        $app_info->{price} = "EUR:".$1  if $price =~ /E(?:UR)?([.\d]+)/;
+        if ($price =~ /^\s*([.\d]+)\s*$/){
+            my $tmp_price = $1;
+            if($tmp_price =~ /^0([.0]+)?$/){
+                $app_info->{price} = 0;
+            }else{
+                $app_info->{price} = "USD:".$tmp_price;
+            }
+        }
         $app_info->{copyright} = trim($license_text);
 
         my $license_html = $license->as_HTML;
@@ -158,33 +173,57 @@ sub extract_app_info {
         }
 
         #descripton
-        my $desc = $tree->look_down(class => "editor_s");
+        my $desc = $tree->look_down( class => "editor_s" );
         $app_info->{description} = $desc->as_text;
 
         #icon
-        my $dbh = new AMMS::DBHelper;
-        my $extra_info = $dbh->get_extra_info($app_info->{app_url_md5});
-        if(ref $extra_info eq "HASH"){
-            $app_info->{icon} = $extra_info->{icon} if defined $extra_info->{icon};
-        }else{
-            $app_info->{icon} = $app_info->{screenshot}->[0] if scalar $app_info->{screenshot};
+        my $dbh        = new AMMS::DBHelper;
+        my $extra_info = $dbh->get_extra_info( $app_info->{app_url_md5} );
+        if ( ref $extra_info eq "HASH" ) {
+            $app_info->{icon} = $extra_info->{icon}
+              if defined $extra_info->{icon};
         }
+        else {
+            $app_info->{icon} = $app_info->{screenshot}->[0]
+              if scalar $app_info->{screenshot};
+        }
+        
 
         #apk_url
         my $downloader = AMMS::Downloader->new;
         my $cookie_jar = HTTP::Cookies->new;
-        $cookie_jar->set_cookie(undef,"mobile_phone_name","HTC%20Desire","/mobile/","www.brothersoft.com",80);
-        $cookie_jar->set_cookie(undef,"mobile_phone_url","/htc/htc_desire","/mobile/","www.brothersoft.com",80);
+        $cookie_jar->set_cookie( undef, "mobile_phone_name", "HTC%20Desire",
+            "/mobile/", "www.brothersoft.com", 80 );
+        $cookie_jar->set_cookie( undef, "mobile_phone_url", "/htc/htc_desire",
+            "/mobile/", "www.brothersoft.com", 80 );
+        $cookie_jar->set_cookie( undef, "sub_device", "2015", "/", "m.brothersoft.com",80 );
         $downloader->{USERAGENT}->cookie_jar($cookie_jar);
-        my $page = $downloader->download($down_load_url);
+
+        #icon total_install_times
+        my $base_name = $1 if $app_info->{app_url} =~ /.*\/(.*?)\.html/;
+        my $m_brothersoft_url = "http://m.brothersoft.com/$base_name/";
+        my $brothersoft_info = $downloader->download($m_brothersoft_url);
         if($downloader->is_success){
-            if($page =~ /<a.*?href="(.*?)".*>Download Now<\/a>/){
-                $app_info->{apk_url} = $url_base.$1;
+            if($brothersoft_info =~ m{<img src="([^"]+)"[^>]+?class="thumb"/>}s){
+                $app_info->{icon} = $1;
+            }
+            if($brothersoft_info =~ m{<strong>Downloads:</strong>.*?([\d,]+)}s){
+                my $tmp_times = trim($1);
+                $tmp_times =~ s/,//g;
+                $app_info->{total_install_times} = $tmp_times;
+            }
+        }
+        my $page = $downloader->download($down_load_url);
+        if ( $downloader->is_success ) {
+
+            if ( $page =~ /<a.*?href="(.*?)".*>Download Now<\/a>/ ) {
+                $app_info->{apk_url} = $url_base . $1;
             }
         }
         $tree->delete;
     };
     $app_info->{status} = 'success';
+
     $app_info->{status} = 'fail' if $@;
     return scalar %{$app_info};
 }
@@ -202,7 +241,7 @@ sub extract_page_list {
             $per_page    = $1;
             $total_pages = int( $2 / $per_page + 0.99 );
         }
-        push @{$pages},$params->{base_url} . "index.html";
+        push @{$pages}, $params->{base_url} . "index.html";
         for ( 2 .. $total_pages ) {
             push @{$pages}, $params->{base_url} . $_ . ".html";
         }
@@ -230,15 +269,18 @@ sub extract_app_from_feeder {
         my @nodes = $showing_node->look_down( "_tag", "dl", );
         for my $item (@nodes) {
             my $parent = $item->parent();
-            my $img = $parent->look_down("_tag","img");
+            my $img = $parent->look_down( "_tag", "img" );
+
             #app_url
             my $dt = $item->find_by_tag_name("dt");
             if ($dt) {
                 my $app_name_ver_a_tag = $dt->find_by_tag_name("a");
-                my $app_url = $url_base . encode_utf8($app_name_ver_a_tag->attr("href"));
-                $apps->{$1} = $app_url 
+                my $app_url =
+                  $url_base . encode_utf8( $app_name_ver_a_tag->attr("href") );
+                $apps->{$1} = $app_url
                   if $app_name_ver_a_tag->attr("href") =~ /(\d+)\.html/;
-                $dbh->save_extra_info(md5_hex($app_url),{icon => $img->attr("src")});
+                $dbh->save_extra_info( md5_hex($app_url),
+                    { icon => $img->attr("src") } );
             }
         }
     };
@@ -258,14 +300,4 @@ sub kb_m {
     # return byte
     return int( $size * 1024 );
 }
-
-sub save_out_of_category {
-    my ( $app_url_md5) = @_;
-    my $str = "Out of TrustGo category:" . $app_url_md5;
-    open( OUT, ">>/home/nightlord/outofcat.txt" );
-    print OUT "$str\n";
-    close(OUT);
-    die "Out of Category";
-    return;
-}    ## --- end sub save_out_of_category
 

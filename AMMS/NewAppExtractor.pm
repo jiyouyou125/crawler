@@ -136,7 +136,7 @@ sub get_app_result
 
     my $app_result  = $self->{ 'APP_RESULT' };
     my $logger      = $self->{ 'CONFIG_HANDLE' }->getAttribute('LOGGER');
-    my $downloader  = new AMMS::Downloader;
+    my $downloader  = $self->{ 'DOWNLOADER' };
     my $web_lang;
 
     $self->invoke_hook_functions('language_suffix',\$web_lang);
@@ -197,6 +197,7 @@ sub get_app_result
         $apk_info{'app_package_name'} = $app_info{'app_package_name'};
         $self->invoke_hook_functions('download_app_apk', \%apk_info);
 
+        $app_info{ 'apk_md5'  } = $apk_info{apk_md5};
         $app_info{ 'status'  } = 'success';
 
         print "end processing $md5\n";
@@ -533,6 +534,7 @@ sub initialise
 
     ($self->{ 'CONFIG_HANDLE' } = new AMMS::Config)  || return undef;
     ($self->{ 'DB_HELPER' }     = new AMMS::DBHelper)    || return undef;
+    ($self->{ 'DOWNLOADER' }    = new AMMS::Downloader) || return undef;
 
 
     $self->{'TOP_DIR'} = $self->{'CONFIG_HANDLE'}->getAttribute( 'TempFolder' );
@@ -637,7 +639,7 @@ sub deal_with_app_info
     my $status;
     my $errstr;
     my $md5         = $app_info->{'app_url_md5'};
-    my $downloader  = new AMMS::Downloader;
+    my $downloader  = $self->{DOWNLOADER};
     my $logger      = $self->{ 'CONFIG_HANDLE' }->getAttribute('LOGGER');
 
     #create resouce directory
@@ -726,7 +728,7 @@ sub deal_with_app_info
         open VIDEO, ">$app_res_video_dir/video";
         print VIDEO $app_info->{ 'video' };
         close VIDEO;
-#   $downloader->download_to_disk($app_info->{'video'},$app_res_video_dir,'video');
+#$downloader->download_to_disk($app_info->{'video'},$app_res_video_dir,'video');
 #        $logger->error( "fail to download video ,AppID:$md5" ) and return 0 if not $downloader->is_success;
     }
 
@@ -791,7 +793,7 @@ sub download_app_apk
     my $md5 =   $apk_info->{'app_url_md5'};
     my $apk_dir= $self->{'TOP_DIR'}.'/'. get_app_dir( $self->getAttribute('MARKET'),$md5).'/apk';
 
-    my $downloader  = new AMMS::Downloader;
+    my $downloader  = $self->{'DOWNLOADER'};
 
     $downloader->header({Referer=>$apk_info->{'app_url'}});
 
@@ -875,7 +877,7 @@ sub check_app_info{
 
     return 0 if( $app_info->{'status'} eq 'fail' );
 
-    if (not defined $app_info->{'app_name'} 
+    return 0 if (not defined $app_info->{'app_name'} 
             or not defined $app_info->{'official_category'}
             or not defined $app_info->{'trustgo_category_id'}
             or not defined $app_info->{'last_update'}
@@ -885,13 +887,7 @@ sub check_app_info{
             or not defined $app_info->{'current_version'} 
             or not defined $app_info->{'app_url'} 
             or not defined $app_info->{'description'} 
-            )
-            {
-                open my $handle,">>","/home/nightlord/lack_app_info.txt";
-                print $handle Dumper($app_info);
-                close $handle;
-                return 0;
-            }
+            );
 
     return 1;
 }

@@ -55,6 +55,7 @@ my %SUPPORTED_HOOKS = (
     'extract_app_info'          => 'extract all app info from app webpage',
     'download_app_apk'          => 'download app apk',
     'language_suffix'          => 'support language',
+    'extra_processing'          => 'extra processing, for example multi-lang',
 #    'continue-test'             => 'return true if should continue iterating',
 #    'modified-since'            => 'returns modified-since time for URL passed',
 );
@@ -134,7 +135,7 @@ sub get_app_result
 
     my $app_result  = $self->{ 'APP_RESULT' };
     my $logger      = $self->{ 'CONFIG_HANDLE' }->getAttribute('LOGGER');
-    my $downloader  = new AMMS::Downloader;
+    my $downloader  = $self->{ 'DOWNLOADER' };
     my $web_lang;
 
     $self->invoke_hook_functions('language_suffix',\$web_lang);
@@ -199,7 +200,9 @@ sub get_app_result
         $apk_info{'apk_url'} = $app_info{'apk_url'};
         $apk_info{'price'} = $app_info{'price'};
         $apk_info{'size'} = $app_info{'size'};
+        $apk_info{'app_package_name'} = $app_info{'app_package_name'};
         $self->invoke_hook_functions('download_app_apk', \%apk_info);
+        $app_info{ 'apk_md5'  } = $apk_info{apk_md5};
 
         $app_info{ 'status'  } = 'success';
 
@@ -247,7 +250,7 @@ sub finish_task
         map { $app_result->{$_}->{'app_info'}->{'status'} = 'fail' } keys %{ $app_result };
     }
 
-    $self->{ 'DB_HELPER' }->update_app_info_status( $_,$app_result->{$_}->{'app_info'}->{'status'} ) foreach ( keys %{ $app_result} );
+#$self->{ 'DB_HELPER' }->update_app_info_status( $_,$app_result->{$_}->{'app_info'}->{'status'} ) foreach ( keys %{ $app_result} );
 
     if( defined $self->{'NEXT_TASK_TYPE'} ){
         $self->{ 'DB_HELPER' }->update_task_type($self->{'TASK_ID'},$self->{'NEXT_TASK_TYPE'},'undo');
@@ -537,7 +540,7 @@ sub initialise
 
     ($self->{ 'CONFIG_HANDLE' } = new AMMS::Config)  || return undef;
     ($self->{ 'DB_HELPER' }     = new AMMS::DBHelper)    || return undef;
-
+    ($self->{ 'DOWNLOADER' }    = new AMMS::Downloader) || return undef;
 
     $self->{'TOP_DIR'} = $self->{'CONFIG_HANDLE'}->getAttribute( 'TempFolder' );
     return $self;
@@ -641,7 +644,7 @@ sub deal_with_app_info
     my $status;
     my $errstr;
     my $md5         = $app_info->{'app_url_md5'};
-    my $downloader  = new AMMS::Downloader;
+    my $downloader  = $self->{ 'DOWNLOADER' };
     my $logger      = $self->{ 'CONFIG_HANDLE' }->getAttribute('LOGGER');
 
     #create resouce directory
@@ -732,6 +735,7 @@ sub deal_with_app_info
 #        $logger->error( "fail to download video ,AppID:$md5" ) and return 0 if not $downloader->is_success;
     }
 
+    $self->invoke_hook_functions('extra_processing', $app_info);
     return 1;
 }
 
@@ -753,7 +757,7 @@ sub package_and_send
         next if $self->{'APP_RESULT'}->{$md5}->{'app_info'}->{'status'} ne 'success';
         $app_dir = get_app_dir($market,$md5);
         #generate meta
-        next if not $self->generate_meta_file($app_dir,$self->{'APP_RESULT'}->{$md5}->{'app_info'});
+        next if not $self->generate_meta_file($app_dir,$self->{'APP_RESULT'}->{$md5});
         $app_param .= " $app_dir"; 
         ++$app_count;
     }
@@ -789,7 +793,9 @@ sub download_app_apk
     my $md5 =   $apk_info->{'app_url_md5'};
     my $apk_dir= $self->{'TOP_DIR'}.'/'. get_app_dir( $self->getAttribute('MARKET'),$md5).'/apk';
 
-    my $downloader  = new AMMS::Downloader;
+    my $downloader  = $self->{'DOWNLOADER'};
+
+    $downloader->header({Referer=>$apk_info->{'app_url'}});
 
     if( $apk_info->{price} ne '0' ){
         $apk_info->{'status'}='paid';
@@ -856,11 +862,12 @@ sub continue_test
     my $app_info    = shift;
 
 #check update time and software size
-    my $hash=$self->{'DB_HELPER'}->get_app_info_from_db($app_info->{'app_url_md5'},'last_update','size','current_version');
+    my $hash=$self->{'DB_HELPER'}->get_app_info_from_db($app_info->{'app_url_md5'},'last_update','size','current_version','price','apk_md5');
 
     return 1 if str2time($hash->{'last_update'}) ne str2time($app_info->{'last_update'})
         or $hash->{'size'} ne $app_info->{'size'} 
-        or $hash->{'current_version'} ne $app_info->{'current_version'}; 
+        or $hash->{'current_version'} ne $app_info->{'current_version'} 
+        or ($self->{'MARKET_INFO'}->{'id'} !=1 and $hash->{'price'} eq '0' and $hash->{'apk_md5'} eq ''); ##google's apk needs manual download
 
     return 0;
 }
@@ -890,18 +897,20 @@ sub check_app_info{
 
 sub generate_meta_file
 {
-    my $self        = shift;
-    my $app_dir     = shift;
-    my $app_info    = shift;
+    my $self    = shift;
+    my $app_dir = shift;
+    my $app     = shift;
 
     my $meta_file =$self->{'TOP_DIR'}."/$app_dir/meta";
 
     open( META, ">:utf8","$meta_file") or ($logger->error("fail to open $meta_file") and return 0);
     select META;
 
+    my $app_info=$app->{app_info};
+    my $apk_info=$app->{apk_info};
     print "app_unique_name=".$app_info->{'app_url_md5'}; 
     print "\napp_name=".$app_info->{'app_name'} if exists $app_info->{'app_name'}; 
-    print "\napp_unique_package_name=".$app_info->{'app_unique_package_name'}; 
+    print "\napp_unique_package_name=".$apk_info->{'app_package_name'}; 
     print "\nofficial_category=".$app_info->{'official_category'}; 
     print "\nsub_official_category=".$app_info->{'sub_official_category'}; 
     print "\ntrustgo_category=".$app_info->{'trustgo_category_id'};
@@ -920,6 +929,7 @@ sub generate_meta_file
     print "\ncurrent_version=".$app_info->{'current_version'}; 
     print "\ntotal_install_times=".$app_info->{'total_install_times'}; 
     print "\nbuy_link=".$app_info->{'app_url'}; 
+    print "\ndownload_link=".$app_info->{'apk_url'} if $app_info->{'apk_url'}=~/^http/i; 
     print "\nwebsite=".$app_info->{'website'}; 
     print "\nsupport_website=".$app_info->{'support_website'}; 
     print "\nlanguage=".$self->{'MARKET_INFO'}->{'language'}; 
